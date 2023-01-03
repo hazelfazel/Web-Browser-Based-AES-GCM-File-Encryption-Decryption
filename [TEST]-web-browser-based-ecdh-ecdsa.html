@@ -1,0 +1,589 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta http-equiv="X-UA-Compatible" content="IE=edge">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+
+		<title>Web Browser Based ECDH, ECDSA, AES-GCM Test</title>
+
+		<meta name="description" content="self contained in browser file encryption, key exchange and signature using ECDH, ECDSA, AES-GCM.">
+ 		<meta name="author" content="Florian Rienhardt">
+		<meta name="generator" content="Notepad++">
+
+		<style>
+			html {
+				width: 100%;
+				height: 100%;
+				-webkit-font-smoothing: antialiased;
+				margin: 0;
+				padding: 0;
+				background-color: #fefefe;
+				color: #333333;
+			}
+			body {
+				margin: 0 auto;
+				padding: 0;
+				font-family: "Open Sans", "Helvetica Neue", "Arial", "Verdana", "sans-serif";
+				line-height: 1.8;
+				font-size: 1.1em;
+				font-weight: normal;
+			}
+			a, a:link, a:visited, a:active  {
+				text-decoration: none;
+				transition: color .1s linear;
+				color: #005190;
+				word-wrap: break-word;
+			}
+			a::after {
+				content: "↗️";
+			}
+			a:hover {
+				cursor: pointer;
+				color: red;
+			}
+			a:hover {
+				text-decoration: underline;
+			}
+			.wrapper {
+				display: block;
+				clear: both;
+				box-sizing: border-box;
+				padding-left: 0.8em;
+				padding-right: 0.8em;
+				margin: 0 auto;
+				max-width: 1300px;
+				min-width: 300px;
+			}			
+			p, td, span {
+				text-align: inherit;
+				vertical-align: top;
+				white-space: pre-wrap;
+				word-wrap: normal;
+			}
+			pre {
+				display: block;
+				margin: 0 0 1em;
+				background-color: #fefefe;
+				border: 1px solid #ccc;
+				border-radius: 5px;
+			}
+			button, input, select, textarea {
+				font-size: 1.1em;
+				display: inline-block;
+				box-sizing: border-box;
+				padding: 5px;
+				background-color: #fff;
+				border: 1px solid #ccc;
+				border-radius: 5px;
+			}
+			.clickbutton {
+				display: inline-block;
+				clear: both;
+				box-sizing: border-box;
+				vertical-align: middle;
+				cursor: pointer;
+				text-transform: none;
+				overflow: visible;
+				background-color: #337ab7;
+				max-width: 450px;
+				min-width: 200px;
+				border: none;
+				border-radius: 5px;
+				color: #fff;
+				text-align: center!important;
+				cursor: pointer;
+				padding: 1em;
+				margin-top: 0.1em;
+				margin-left: 0.1em;
+				margin-right: 0.1em;
+				margin-bottom: 1em;
+			}
+			.clickbutton:hover {
+				color: #ffffff;
+				filter: brightness(80%);
+			}
+			.hidden {
+				display: none;
+			}
+			
+			table, td, tr {
+				border: 0;
+			}
+			td {
+				padding: 0.5em;
+			}
+			.redspan::before {
+				color: red;
+				content: "✖";
+				padding-right: 0.3em;
+			}
+			.greenspan::before {
+				color: green;
+				content: "✔";
+				padding-right: 0.3em;
+			}
+		</style>
+
+	</head>
+<body>
+
+<div class="wrapper">
+
+<h1>Web Browser Based ECDH / ECDSA</h1>
+<p>Use your Web Browser to encrypt, decrypt, and sign any data with AES in Galois/Counter Mode used in a private/public key scenario with ECDH / ECDSA as specified in <a href="https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/encrypt">Mozilla SubtleCrypto</a>.</p>
+<p>More samples for in browser encryption can be found at <a href="https://gist.github.com/pedrouid/b4056fd1f754918ddae86b32cf7d803e#ecdsa---importkey">Web Cryptography API Examples</a></p>
+<p>Be super cautios when using this code in real world applications. Cryptography can easily go wrong with fatal impact on security. Ask a cryptographer, let someone review and test your code.</p>
+<p>Following a few ideas without any guarantee:</p>
+<ul>
+<li>Generate a private/public master key.</li>
+<li>Use this master key only to sign newly created ephemeral private/public keys you use. So your communication partners can verify that this ephemeral key was created by you.</li>
+<li>Add some kind of time stamp into the signed data. So your communication partners can verify when the data was signed, encrypted, etc. Consider to discard signed data after the signature is too old.</li>
+<li>Make use of some kind of counter you always require to increment in your communication. Only accept signed messages with the latest counter. This might help to force replay attacks.</li>
+<li>Do only derive an encryption key from a password to secure the master key. Ensure that this password is strong (has high entropy).</li>
+<li>For all other tasks derive encryption and signature keys from ephemeral private/public keys.</li>
+<li>Sign cipher data as well as the plaintext data. We have enough memory and the extra space required should be worth.</li>
+</ul>
+<hr>
+<p>Look at the console to see what is happening after clicking onto the button below.</p>
+<button id="btnEncrypt" class="clickbutton" type="button" onclick="run();">Run</button>
+<button id="btnReload" class="clickbutton" type="button" onclick="javascript:location.reload();">Reload Page</button>
+
+</div>
+
+<script>
+
+let pbkdf2salt = window.crypto.getRandomValues(new Uint8Array(16));
+let password = "super_secret";
+let passwordDerivedKey;
+
+let masterKey;
+let ephemeralKey;
+
+let derivedEncryptionKey;
+let derivedDecryptionKey;
+
+let masterKeyExported;
+let ephemeralKeyExported;
+
+let privateCertificate;
+let publicCertificate;
+let encryptedCertificateContainer;
+
+let someEncryptedData;
+let decrypted1;
+let decrypted2;
+let decrypted3;
+
+function readfile(file) {
+	return new Promise((resolve, reject) => {
+		let f = new FileReader();  
+		f.onload = () => {
+			resolve(f.result)
+		};
+		f.readAsArrayBuffer(file);
+	});
+}
+
+function fromUnixtimeToLocalDate(unixTimestamp ){
+	return new Date(unixTimestamp * 1000);
+}
+
+function ab2str(buf) {
+	return String.fromCharCode.apply(null, new Uint8Array(buf));
+}
+
+function arr2Hex(buf) {
+	let bufArray = Array.from(new Uint8Array(buf));
+	return bufArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+function foldHash(hashBufferA, hashBufferB) {
+	let hash1 = Array.from(new Uint8Array(hashBufferA));
+	let hash2 = Array.from(new Uint8Array(hashBufferB));
+	if ( (hash1.length === hash2.length) && (hash1.length % 8 === 0) ) {
+		for (let i=0; i<hash1.length; i++) {
+			hash1[i] = hash1[i]^hash2[i];
+		}
+		while (hash1.length > 6) {
+			for (let i=0; i<(hash1.length / 2); i++) {
+				hash1[i] = hash1[i]^hash1[(hash1.length / 2)+i];
+			}
+			hash1 = hash1.slice(0, (hash1.length / 2));
+		}
+		return hash1;
+	}
+}
+
+async function deriveKeyIv(password, salt, iterations = 1000000) {
+	let encodedPassword = new TextEncoder("utf-8").encode(password);
+	let pbkdf2Key = await window.crypto.subtle.importKey(
+		"raw",
+		encodedPassword,
+		{
+			name: "PBKDF2"
+		},
+		false,
+		["deriveBits", "deriveKey"],
+	);
+
+	let pbkdf2bytes = await window.crypto.subtle.deriveBits(
+		{
+			"name": "PBKDF2",
+			"salt": salt,
+			"iterations": iterations,
+			"hash": "SHA-384" // or SHA-256
+		},
+		pbkdf2Key,
+		384 // first 32 bytes = 256 bit AES-GCM key, last 16 bytes = 128 IV
+			// see for correct salt size! (16 bytes)
+			// https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/deriveBits
+	);
+
+	let key = await window.crypto.subtle.importKey(
+		"raw",
+		pbkdf2bytes.slice(0, 32),
+		{
+			name: "AES-GCM",
+			length: 256
+		},
+		false,
+		["encrypt", "decrypt"]
+	);
+	let iv = pbkdf2bytes.slice(32);
+	return {"key": key, "iv": iv};
+}
+
+async function derivePBKDF2Key(password, salt, iterations = 1000000) {
+	let encodedPassword = new TextEncoder("utf-8").encode(password);
+	let pbkdf2Key = await window.crypto.subtle.importKey(
+		"raw",
+		encodedPassword,
+		{
+			name: "PBKDF2"
+		},
+		false,
+		["deriveBits", "deriveKey"],
+	);
+
+	return await window.crypto.subtle.deriveKey(
+		{
+			name: "PBKDF2",
+			salt: salt,
+			iterations: iterations,
+			hash: "SHA-384", // or SHA-256
+		},
+		pbkdf2Key,
+		{
+			"name": "AES-GCM",
+			"length": 256
+		},
+		true,
+		["encrypt", "decrypt"],
+	);
+}
+
+async function generateKey() {
+	return await window.crypto.subtle.generateKey(
+		{
+			name: "ECDH",
+			namedCurve: "P-384", // can be "P-256", "P-384", or "P-521"
+		},
+		true, // whether the key is extractable (i.e. can be used in exportKey)
+		["deriveKey", "deriveBits"] // can be any combination of "deriveKey" and "deriveBits"
+	);
+}
+
+async function deriveECDHKey(publicKey, privateKey) {
+	return await window.crypto.subtle.deriveKey(
+		{
+			name: "ECDH",
+			namedCurve: "P-384", // can be "P-256", "P-384", or "P-521"
+			public: publicKey, // an ECDH public key from generateKey or importKey
+		},
+		privateKey, //your ECDH private key from generateKey or importKey
+		{	// the key type you want to create based on the derived bits
+			name: "AES-GCM", // can be any AES algorithm ("AES-CTR", "AES-CBC", "AES-CMAC", "AES-GCM", "AES-CFB", "AES-KW", "ECDH", "DH", or "HMAC")
+			// the generateKey parameters for that type of algorithm
+			length: 256, // can be  128, 192, or 256
+		},
+		false, // whether the derived key is extractable (i.e. can be used in exportKey)
+		["encrypt", "decrypt"] // limited to the options in that algorithm's importKey
+	);
+}
+
+async function exportKey(keyToExport) {
+	return await window.crypto.subtle.exportKey(
+		"jwk", // can be "jwk" (public or private), "raw" (public only), "spki" (public only), or "pkcs8" (private only)
+		keyToExport // can be a publicKey or privateKey, as long as extractable was true
+	);
+}
+
+async function importKey(_x, _y, _d, _crv, _algorithm, _usage) {
+	if (_d !== null) {
+		return await window.crypto.subtle.importKey(
+			"jwk", // can be "jwk" (public or private), "raw" (public only), "spki" (public only), or "pkcs8" (private only)
+			{   // this is an example jwk key, other key types are Uint8Array objects
+				kty: "EC",
+				crv: _crv,
+				x: _x,
+				y: _y,
+				d: _d,
+				ext: true,
+			},
+			{   // these are the algorithm options
+				name: _algorithm,
+				namedCurve: _crv, //can be "P-256", "P-384", or "P-521"
+			},
+			true, // whether the key is extractable (i.e. can be used in exportKey)
+			_usage // "deriveKey" and/or "deriveBits" for private keys only (just put an empty list if importing a public key)
+		);
+	} else {
+		return await window.crypto.subtle.importKey(
+			"jwk", // can be "jwk" (public or private), "raw" (public only), "spki" (public only), or "pkcs8" (private only)
+			{   // this is an example jwk key, other key types are Uint8Array objects
+				kty: "EC",
+				crv: _crv,
+				x: _x,
+				y: _y,
+				ext: true,
+			},
+			{   // these are the algorithm options
+				name: _algorithm,
+				namedCurve: _crv, // can be "P-256", "P-384", or "P-521"
+			},
+			true, // whether the key is extractable (i.e. can be used in exportKey)
+			_usage // "deriveKey" and/or "deriveBits" for private keys only (just put an empty list if importing a public key)
+			);
+	}
+}
+
+async function encrypt(data, key, iv = null) {
+	if (iv === null) {
+		iv = crypto.getRandomValues(new Uint8Array(16));
+	}
+	// tagLength can be 32, 64, 96, 104, 112, 120 or 128 (default)
+	let cipher = await crypto.subtle.encrypt({"name":"AES-GCM", "iv":iv, tagLength: 128}, key, data);
+	return {"cipher": cipher, "iv": iv};
+}
+
+async function decrypt(data, iv, key) {
+	// tagLength can be 32, 64, 96, 104, 112, 120 or 128 (default)
+	return await crypto.subtle.decrypt({"name":"AES-GCM", "iv":iv, tagLength: 128}, key, data);
+}
+
+async function sign(data, privateKey, hashFunction) {
+	return await window.crypto.subtle.sign(
+		{
+			name: "ECDSA",
+			hash: {
+				name: hashFunction
+			}, // can be "SHA-1", "SHA-256", "SHA-384", or "SHA-512"
+		},
+		privateKey, // private key from generateKey or importKey from above
+		data // ArrayBuffer of data you want to sign
+	);
+}
+
+async function verify(data, signature, publicKey, hashFunction) {
+	return await window.crypto.subtle.verify(
+		{
+			name: "ECDSA",
+			hash: {
+				name: hashFunction
+			}, // can be "SHA-1", "SHA-256", "SHA-384", or "SHA-512"
+		},
+		publicKey, // from generateKey or importKey above
+		signature, // ArrayBuffer of the signature
+		data // ArrayBuffer of the data
+	);
+}
+
+async function exportPublicKeyPem(publicKey) {
+	let exportedKey = await window.crypto.subtle.exportKey(
+		"spki",
+		publicKey
+	);
+	let exportedKeyAsString = ab2str(exportedKey);
+	let exportedKeyAsBase64 = window.btoa(exportedKeyAsString);
+	return `-----BEGIN PUBLIC KEY-----\n${exportedKeyAsBase64}\n-----END PUBLIC KEY-----`;
+}
+
+function concatTypedArrays(a, b) {
+	// a, b TypedArray of same type
+	let c = new (a.constructor)(a.length + b.length);
+	c.set(a, 0);
+	c.set(b, a.length);
+	return c;
+}
+
+/**
+WebCrypto and Windows use the P1363 format for signatures, while OpenSSL supports only the 'DER' (ASN.1) format.
+Wrap an ECDSA signature in the format r || s into a TLV encoding as defined by RFC 3279.
+
+Note: r and s are unsigned big integers but signed in ASN.1. So you might pad the values with zeros.
+
+asn1=SEQUENCE:ecparams
+[ecparams]
+r=INTEGER:0x4E1D1917677ACE0010739582BDCBF029D7285C87468F0A46676B26F3D3E429BE83B50A7C8051F505922FD9BBF5573DBC
+s=INTEGER:0x4B102313F7D0F3478CE27EA7695913E411A83B78C87A12DE0890198A46F37668091BB93B26AABBFC18400CB5B64F7F60
+
+openssl asn1parse -genconf test.asn -out test.der
+openssl dgst -sha384 -verify public.txt -signature test.der data.txt.bin
+
+**/
+function p1363ToAsn1(signature) {
+	//payload = "02" + length(r) + r + "02" + length(s) + s;
+	//payload = "30" + length(payload) + payload;
+	
+	let len = signature.length / 2;
+	let r = new Uint8Array(signature.slice(0, len));
+	let s = new Uint8Array(signature.slice(len));
+
+	if (r[0] > 127) {
+		r = concatTypedArrays(new Uint8Array([0]), r);
+	}
+	r = concatTypedArrays(new Uint8Array([r.length]), r);
+	r = concatTypedArrays(new Uint8Array([2]), r);
+
+	if (s[0] > 127) {
+		s = concatTypedArrays(new Uint8Array([0]), s);
+	}
+	s = concatTypedArrays(new Uint8Array([s.length]), s);
+	s = concatTypedArrays(new Uint8Array([2]), s);
+	
+	let payload = concatTypedArrays(r, s);
+	payload = concatTypedArrays(new Uint8Array([payload.length]), payload);
+	payload = concatTypedArrays(new Uint8Array([48]), payload); // hex 30 is 48 in decimal!
+	
+	return payload;
+}
+
+async function run() {
+	// normally the masterKey is fixed and should be imported
+	masterKey = await generateKey();
+	ephemeralKey = await generateKey();
+
+	derivedEncryptionKey = await deriveECDHKey(masterKey.publicKey, ephemeralKey.privateKey);
+	derivedDecryptionKey = await deriveECDHKey(ephemeralKey.publicKey, masterKey.privateKey);
+
+	someData = new TextEncoder().encode("Hello World! This is an ECDH/ECDSA and AES-GCM Example.");
+	someEncryptedData = await encrypt(someData, derivedEncryptionKey);
+	decrypted1 = await decrypt(someEncryptedData.cipher, someEncryptedData.iv, derivedEncryptionKey);
+	decrypted2 = await decrypt(someEncryptedData.cipher, someEncryptedData.iv, derivedDecryptionKey);
+	
+	masterKeyExported = await exportKey(masterKey.privateKey);
+	ephemeralKeyExported = await exportKey(ephemeralKey.publicKey);
+	
+	privateKey = await importKey(masterKeyExported.x, masterKeyExported.y, masterKeyExported.d, "P-384", "ECDH", ["deriveKey", "deriveBits"]);
+	publicKey = await importKey(masterKeyExported.x, masterKeyExported.y, null, "P-384", "ECDH", []);
+	masterKeyImported = {privateKey, publicKey};
+
+	privateKey = await importKey(masterKeyExported.x, masterKeyExported.y, masterKeyExported.d, "P-384", "ECDSA", ["sign"]);
+	publicKey = await importKey(masterKeyExported.x, masterKeyExported.y, null, "P-384", "ECDSA", ["verify"]);
+	masterSignatureKeyImported = {privateKey, publicKey};
+	someSignature = await sign(someData, masterSignatureKeyImported.privateKey, "SHA-384");
+	someSignatureCheck = await verify(someData, someSignature, masterSignatureKeyImported.publicKey, "SHA-384");
+	console.log( "public key:\r\n" + await exportPublicKeyPem(masterSignatureKeyImported.publicKey) );
+	
+	publicKey = await importKey(ephemeralKeyExported.x, ephemeralKeyExported.y, null, "P-384", "ECDH", []);
+	ephemeralKeyImported = {publicKey};
+	
+	derivedDecryptionKey_ = await deriveECDHKey(ephemeralKeyImported.publicKey, masterKeyImported.privateKey);
+	decrypted3 = await decrypt(someEncryptedData.cipher, someEncryptedData.iv, derivedDecryptionKey_);
+
+	derivedPasswordKey = await derivePBKDF2Key(password, pbkdf2salt);
+
+	console.log( "decrypted 1: " + new TextDecoder().decode(decrypted1) );
+	console.log( "decrypted 2: " + new TextDecoder().decode(decrypted2) );
+	console.log( "decrypted 3: " + new TextDecoder().decode(decrypted3) );
+	console.log( "Signature Check: " + someSignatureCheck );
+	console.log( "Signature: " + btoa(String.fromCharCode.apply(null, new Uint8Array(someSignature))) );
+	console.log( "Data: " + btoa(String.fromCharCode.apply(null, new Uint8Array(someData))) );
+	console.log( "Signature ASN.1: " + btoa(String.fromCharCode.apply(null, p1363ToAsn1(new Uint8Array(someSignature)))) );
+
+	privateCertificate = {
+		"version"			: "1",
+		"firstname"			: "Joe",
+		"lastname"			: "Doe",
+		"email"				: "joe.doe@example.com",
+		"creation"			: (Math.floor(Date.now() / 1000)).toString(),
+		"validity"			: "", // infinite
+		"key"				: {
+								"type"	: "EC",
+								"curve"	: "P-384",
+								"x"		: masterKeyExported.x,
+								"y"		: masterKeyExported.y,
+								"d"		: masterKeyExported.d
+		}
+	};
+
+	publicCertificate = privateCertificate;
+	delete publicCertificate.key.d
+
+	console.log( "------------------[privateCertificate]" );
+	console.log(JSON.stringify(privateCertificate));
+	console.log( "------------------[publicCertificate]" );
+	console.log(JSON.stringify(publicCertificate));
+
+	console.log( "------------------[private key data]" );
+	console.log( "masterKey x: " + masterKeyExported.x );
+	console.log( "masterKey y: " + masterKeyExported.y );
+	console.log( "masterKey d: " + masterKeyExported.d );
+	console.log( "pbkdf2salt: " + btoa(String.fromCharCode.apply(null,  pbkdf2salt)) );
+	console.log( "password: " + password );
+	console.log( "------------------[public key data]" );
+	publicMasterKeyExported = await exportKey(masterKey.publicKey);
+	console.log( "publicMasterKey x: " + publicMasterKeyExported.x );
+	console.log( "publicMasterKey y: " + publicMasterKeyExported.y );
+	console.log( "------------------[ephemeral public key data]" );
+	console.log( "ephemeralKey x: " + ephemeralKeyExported.x );
+	console.log( "ephemeralKey y: " + ephemeralKeyExported.y );
+
+	// encrypt private key with pbkdf2 derived key
+	someData = new TextEncoder().encode(JSON.stringify(privateCertificate));
+	keyIv = await deriveKeyIv(password, pbkdf2salt);
+	someEncryptedData = await encrypt(someData, keyIv.key, keyIv.iv);
+	encryptedCertificateContainer	= {
+		"version"		:	"1",
+		"pbkdf2salt"	:	btoa(String.fromCharCode.apply(null, pbkdf2salt)),
+		"cipher"		:	btoa(String.fromCharCode.apply(null, new Uint8Array(someEncryptedData.cipher)))
+	}
+	console.log(JSON.stringify(encryptedCertificateContainer));
+	
+	someEncryptedData.cipher = Uint8Array.from(atob(encryptedCertificateContainer.cipher), c => c.charCodeAt(0));
+	pbkdf2salt = Uint8Array.from(atob(encryptedCertificateContainer.pbkdf2salt), c => c.charCodeAt(0));
+	keyIv = await deriveKeyIv(password, pbkdf2salt);
+	decrypted1 = await decrypt(someEncryptedData.cipher, keyIv.iv, keyIv.key);
+	decrypted1 = new TextDecoder().decode(decrypted1);
+	privateCertificate = JSON.parse(decrypted1);
+	console.log( "------------------[private certificate decrypted]" );
+	console.log ( decrypted1 );
+	
+	concat = await new Blob([ pbkdf2salt, someEncryptedData.cipher ]).arrayBuffer();
+	file = new Blob([concat], {type: "application/download"});
+	blobUrl = URL.createObjectURL(file);
+	element = document.createElement("a");
+	element.href = blobUrl;
+	element.download = "keyfile.enc";
+	element.click();
+	
+	bytesRead = await file.arrayBuffer();
+	bytesRead = new Uint8Array(bytesRead);
+	
+	salt = bytesRead.slice(0, 16);
+	cypher = bytesRead.slice(16);
+
+	keyIv_ = await deriveKeyIv(password, salt);
+	
+	decrypted1 = await decrypt(cypher, keyIv_.iv, keyIv_.key);
+	decrypted1 = new TextDecoder().decode(decrypted1);
+	privateCertificate = JSON.parse(decrypted1);
+	console.log( "------------------[private certificate decrypted from file buffer]" );
+	console.log ( decrypted1 );
+}
+
+</script>
+
+</body>
+</html>
