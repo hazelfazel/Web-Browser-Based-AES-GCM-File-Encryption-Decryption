@@ -12,6 +12,6 @@ The security depends essentially on the strength of the used password. Although 
 ## Security
 You shall always check the integrity of this web page. The expected hash of the html file containing this page is posted at the project's github page. Download the plain html file and calculate the SHA256 hash. Verify that the hash of the downloaded html file matches the expected hash from the project's github site.
 
-##Hash:
+### Hash:
 SHA256: 450a38222791f78648a0a150157ac11ef87af47e2c3a81140737a5545e35e89f
 SHA1: 3dc8ff54b8edc26dd684b2e4ad256cf41fd39757
