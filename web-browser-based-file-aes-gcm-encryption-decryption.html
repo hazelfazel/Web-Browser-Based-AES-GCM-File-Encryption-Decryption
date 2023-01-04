@@ -134,7 +134,7 @@
 		</style>
 
 	</head>
-<body>
+<body id="pageBody">
 
 <div class="wrapper">
 
@@ -193,10 +193,6 @@ function readfile(file) {
 		};
 		f.readAsArrayBuffer(file);
 	});
-}
-
-function ab2str(buf) {
-	return String.fromCharCode.apply(null, new Uint8Array(buf));
 }
 
 function arr2Hex(buf) {
@@ -329,7 +325,7 @@ async function decryptFile() {
 			mainPasswordHint.classList.add("greenspan");
 			logContainer.classList.remove("hidden");
 			try {
-				let pbkdf2salt = window.crypto.getRandomValues(new Uint8Array(16));
+				let pbkdf2salt;
 				let filename = selectFile.files[0].name;
 				console.log ( "loading: " + filename );
 				log.textContent += "\r\nreading: " + filename;
@@ -380,6 +376,29 @@ function showDecrypt() {
 	btnEncrypt.classList.add("hidden");
 	cypherContainer.classList.remove("hidden");
 }
+
+function bodyOnLoad() {
+	/*
+		If URL is http://www.example.com/account/search?filter=a#top
+
+		window.location.pathname // /account/search
+		window.location.host     // www.example.com (includes the port if there is one)
+		window.location.hostname // www.example.com
+		window.location.hash     // #top
+		window.location.href     // http://www.example.com/account/search?filter=a#top
+		window.location.port     // (empty string)
+		window.location.protocol // http:
+		window.location.search   // ?filter=a
+	*/
+	let hash = window.location.hash;
+	if (hash === "#encrypt") {
+		showEncrypt();
+	} else if (hash === "#decrypt") {
+		showDecrypt();
+	}
+}
+
+pageBody.addEventListener("load", bodyOnLoad());
 
 </script>
 
