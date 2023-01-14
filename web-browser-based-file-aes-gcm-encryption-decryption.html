@@ -148,7 +148,7 @@
 <div id="cypherContainer" class="hidden">
 <table>
 <tr><td>Select File</td><td><input id="selectFile" type="file" aria-label="Select a file"></td><td id="selectFileHint">Select the File you'd like to process.</td></tr>
-<tr><td>Password</td><td><input id="mainPassword" type="password" aria-label="Enter password"></td><td id="mainPasswordHint">Strong password, minumum length 8 is characters.</td></tr>
+<tr><td>Password</td><td><input id="mainPassword" type="password" aria-label="Enter password"></td><td id="mainPasswordHint">Strong password, minumum length is 8 characters.</td></tr>
 <tr id="trConfirmPassword"><td>Retype Password</td><td><input id="confirmPassword" type="password" aria-label="Confirm password"></td><td id="confirmPasswordHint">Retype your password from above to ensure you didn't mistype it.</td></tr>
 </table>
 <button id="btnEncrypt" class="clickbutton green" type="button" onclick="encryptFile();">Encrypt</button>
@@ -364,10 +364,13 @@ async function decryptFile() {
 	}
 }
 
+var modus = "";
+
 function showEncrypt() {
 	operationModeContainer.classList.add("hidden");
 	btnDecrypt.classList.add("hidden");
 	cypherContainer.classList.remove("hidden");
+	modus = "encrypt";
 }
 
 function showDecrypt() {
@@ -375,6 +378,7 @@ function showDecrypt() {
 	trConfirmPassword.classList.add("hidden");
 	btnEncrypt.classList.add("hidden");
 	cypherContainer.classList.remove("hidden");
+	modus = "decrypt";
 }
 
 function bodyOnLoad() {
@@ -399,6 +403,20 @@ function bodyOnLoad() {
 }
 
 pageBody.addEventListener("load", bodyOnLoad());
+
+mainPassword.addEventListener("keyup", function(event) {
+    if (event.key === "Enter") {
+        if (modus === "encrypt") {
+			confirmPassword.focus();
+		} else decryptFile();
+    }
+});
+
+confirmPassword.addEventListener("keyup", function(event) {
+    if (event.key === "Enter") {
+        encryptFile();
+    }
+});
 
 </script>
 
